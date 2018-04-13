@@ -16,7 +16,7 @@ func newCache(n int) *cache {
 	return &cache{cache: lru.New(n)}
 }
 
-func (c *cache) get(k interface{}, f func(interface{}) (interface{}, error)) (interface{}, error) {
+func (c *cache) get(k interface{}, f func() (interface{}, error)) (interface{}, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if v, found := c.cache.Get(k); found {
@@ -24,7 +24,7 @@ func (c *cache) get(k interface{}, f func(interface{}) (interface{}, error)) (in
 		return v, nil
 	}
 	log.Printf("lookup %v", k)
-	v, err := f(k)
+	v, err := f()
 	if err != nil {
 		return nil, err
 	}

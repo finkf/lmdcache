@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/finkf/lmd/api"
+	"github.com/finkf/lmd/api/client"
 	"github.com/finkf/qparams"
 )
 
@@ -48,12 +49,14 @@ func proxy(w http.ResponseWriter, r *http.Request) {
 
 func handleNGrams(w http.ResponseWriter, r *http.Request) {
 	log.Printf("handling %s", r.URL)
-	var q api.NGramsRequest
+	var q api.TrigramRequest
 	if err := qparams.Decode(r.URL.Query(), &q); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	v, err := ngramsCache.get(q, lookupNGrams)
+	v, err := ngramsCache.get(q, func() (interface{}, error) {
+		return client.New(client.WithHost(lmd)).Trigram(q.F, q.S, q.T)
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -65,24 +68,18 @@ func handleNGrams(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = w.Write(buf.Bytes())
 	log.Printf("handled %s", r.URL)
-}
-
-func lookupNGrams(q interface{}) (interface{}, error) {
-	var res api.NGramsResponse
-	if err := lookup(&res, q, "/ngrams"); err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 
 func handleChar3Grams(w http.ResponseWriter, r *http.Request) {
 	log.Printf("handling %s", r.URL)
-	var q api.Char3GramsRequest
+	var q api.CharTrigramRequest
 	if err := qparams.Decode(r.URL.Query(), &q); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	v, err := char3gramsCache.get(q, lookupChar3Grams)
+	v, err := char3gramsCache.get(q, func() (interface{}, error) {
+		return client.New(client.WithHost(lmd)).CharTrigram(q.Q, q.Regex)
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -94,27 +91,4 @@ func handleChar3Grams(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = w.Write(buf.Bytes())
 	log.Printf("handled %s", r.URL)
-}
-
-func lookupChar3Grams(q interface{}) (interface{}, error) {
-	var res api.Char3GramsResponse
-	if err := lookup(&res, q, "/char3grams"); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func lookup(out, in interface{}, url string) error {
-	params, err := qparams.Encode(in)
-	if err != nil {
-		return err
-	}
-	url = lmd + url + params
-	log.Printf("lookup: %s", url)
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	return json.NewDecoder(resp.Body).Decode(out)
 }
